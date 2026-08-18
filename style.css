@@ -161,3 +161,11 @@
   white-space: pre-wrap;
   word-break: break-word;
 }
+
+.rb-footer {
+  text-align: center;
+  padding: 10px 0 4px;
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  opacity: 0.45;
+}
