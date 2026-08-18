@@ -22,6 +22,7 @@ BaseMetadataProvider 계약을 따른다:
     - metadata_locked=1인 도서는 apply()에서 덮어쓰지 않고 실패로 반환한다.
 """
 
+import json
 import os
 import re
 import time
@@ -48,6 +49,11 @@ SEARCH_URL = BASE_URL + "/search"
 # 플러그인 자체 폴더 내 쓰기 가능한 위치 (도서 원본 경로는 read-only일 수 있어 여기 저장)
 PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
 YAML_EXPORT_DIR = os.path.join(PLUGIN_DIR, "yaml_exports")
+
+# 컨텍스트 메뉴 검색 결과를 카테고리 탭에서도 볼 수 있도록 파일로 캐시한다.
+# (플러그인 인스턴스가 요청마다 새로 생성되는 것으로 보여, 인스턴스 메모리
+#  캐시는 요청 간에 유지되지 않았음 - 파일 캐시로 전환)
+LAST_SEARCH_CACHE_DIR = os.path.join(PLUGIN_DIR, "cache")
 
 HEADERS = {
     "User-Agent": (
@@ -83,10 +89,6 @@ class RidiBookMetadataProvider(BaseMetadataProvider):
 
     def __init__(self):
         self._session = None
-        # 도서 컨텍스트 메뉴에서 실행한 최근 검색 결과 캐시 (db_type별).
-        # URL이 상태를 반영하지 않는 SPA라 자동 이동은 불가능하므로,
-        # 사용자가 사이드바에서 카테고리 탭을 직접 열면 이 캐시를 보여준다.
-        self._last_search = {}
 
     # ------------------------------------------------------------------
     # 내부 HTTP 헬퍼
@@ -420,13 +422,9 @@ class RidiBookMetadataProvider(BaseMetadataProvider):
             import traceback
             print(f"[RidiBookMetadataProvider] YAML 파일 저장 실패 (내용은 반환됨): {traceback.format_exc()}")
 
-        # 카테고리 탭(index.html)에서 보여줄 수 있도록 결과를 캐시해둔다.
-        self._last_search[db_type or "general"] = {
-            "query": query,
-            "book_id": book_id,
-            "results": results,
-            "at": time.time(),
-        }
+        # 카테고리 탭(index.html)에서 보여줄 수 있도록 결과를 파일로 캐시해둔다.
+        # (인스턴스 메모리 캐시는 요청 간 유지가 안 됐음 - 파일로 전환)
+        self._save_last_search_cache(db_type, query, book_id, results)
 
         tab_title = self.category_tab.get("title", "리디북스 검색결과")
         message = f"'{query}' 검색결과 {len(results)}건을 찾았습니다. 사이드바의 '{tab_title}' 탭에서 확인하세요."
@@ -444,12 +442,43 @@ class RidiBookMetadataProvider(BaseMetadataProvider):
     # 카테고리 탭(index.html) 데이터 공급
     # ------------------------------------------------------------------
 
+    def _cache_path(self, db_type):
+        safe_db_type = re.sub(r'[^A-Za-z0-9_-]', "_", str(db_type or "general"))
+        return os.path.join(LAST_SEARCH_CACHE_DIR, f"last_search_{safe_db_type}.json")
+
+    def _save_last_search_cache(self, db_type, query, book_id, results):
+        try:
+            os.makedirs(LAST_SEARCH_CACHE_DIR, exist_ok=True)
+            payload = {
+                "query": query,
+                "book_id": book_id,
+                "results": results,
+                "at": time.time(),
+            }
+            with open(self._cache_path(db_type), "w", encoding="utf-8") as f:
+                json.dump(payload, f, ensure_ascii=False)
+        except Exception:
+            import traceback
+            print(f"[RidiBookMetadataProvider] 캐시 저장 실패: {traceback.format_exc()}")
+
+    def _load_last_search_cache(self, db_type):
+        path = self._cache_path(db_type)
+        if not os.path.exists(path):
+            return None
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            import traceback
+            print(f"[RidiBookMetadataProvider] 캐시 로드 실패: {traceback.format_exc()}")
+            return None
+
     def get_dashboard_data(self, db_type, limit=200):
         """
         컨텍스트 메뉴에서 실행한 최근 검색 결과를 카테고리 풀페이지에 보여준다.
         아직 검색을 실행한 적이 없으면 빈 목록 + 안내 메시지를 반환한다.
         """
-        cached = self._last_search.get(db_type or "general")
+        cached = self._load_last_search_cache(db_type)
         if not cached:
             return {
                 "success": True,

@@ -72,10 +72,14 @@
 }
 
 .rb-grid {
-  display: grid;
+  display: none;
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 14px;
   overflow-y: auto;
+}
+
+.rb-grid:not([hidden]) {
+  display: grid;
 }
 
 .rb-card {
@@ -119,11 +123,15 @@
 }
 
 .rb-yaml-view {
-  display: flex;
+  display: none;
   flex-direction: column;
   gap: 10px;
   flex: 1;
   min-height: 0;
+}
+
+.rb-yaml-view:not([hidden]) {
+  display: flex;
 }
 
 .rb-yaml-topbar {
