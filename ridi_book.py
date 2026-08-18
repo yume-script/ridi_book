@@ -22,6 +22,7 @@ BaseMetadataProvider 계약을 따른다:
     - metadata_locked=1인 도서는 apply()에서 덮어쓰지 않고 실패로 반환한다.
 """
 
+import os
 import re
 import time
 import urllib.parse
@@ -43,6 +44,10 @@ except ImportError:
 
 BASE_URL = "https://ridibooks.com"
 SEARCH_URL = BASE_URL + "/search"
+
+# 플러그인 자체 폴더 내 쓰기 가능한 위치 (도서 원본 경로는 read-only일 수 있어 여기 저장)
+PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
+YAML_EXPORT_DIR = os.path.join(PLUGIN_DIR, "yaml_exports")
 
 HEADERS = {
     "User-Agent": (
@@ -369,30 +374,30 @@ class RidiBookMetadataProvider(BaseMetadataProvider):
 
         saved_path = None
         try:
-            if book_id:
-                gateway = self.get_db_gateway(db_type)
-                row = gateway.fetch_one("SELECT file_path FROM books WHERE id = ?", (book_id,))
-                file_path = row.get("file_path") if row else None
-                if file_path:
-                    import os
-                    stem, _ = os.path.splitext(file_path)
-                    yaml_path = f"{stem}.ridi.yaml"
-                    with open(yaml_path, "w", encoding="utf-8") as f:
-                        f.write(yaml_text)
-                    saved_path = yaml_path
-                    print(f"[RidiBookMetadataProvider] YAML 저장 완료: {yaml_path}")
+            os.makedirs(YAML_EXPORT_DIR, exist_ok=True)
+            safe_title = re.sub(r'[\\/:*?"<>|]', "_", query)[:80]
+            filename = f"{book_id or 'unknown'}_{safe_title}.yaml"
+            yaml_path = os.path.join(YAML_EXPORT_DIR, filename)
+            with open(yaml_path, "w", encoding="utf-8") as f:
+                f.write(yaml_text)
+            saved_path = yaml_path
+            print(f"[RidiBookMetadataProvider] YAML 저장 완료: {yaml_path}")
         except Exception:
             import traceback
             print(f"[RidiBookMetadataProvider] YAML 파일 저장 실패 (내용은 반환됨): {traceback.format_exc()}")
 
         message = f"'{query}' 검색결과 {len(results)}건을 YAML로 만들었습니다."
         if saved_path:
-            message += f"\n저장 위치: {saved_path}"
-        message += f"\n\n{yaml_text}"
+            message += f" (저장 위치: {saved_path})"
+
+        # 새 탭에 YAML 내용을 바로 보여주기 위해 data: URL로 인코딩.
+        # (컨텍스트 메뉴 액션은 open_url 필드만 프론트엔드가 새 창으로 열어주는 것으로 확인됨 - naver_book 참고)
+        data_url = "data:text/plain;charset=utf-8," + urllib.parse.quote(yaml_text)
 
         return {
             "success": True,
             "message": message,
             "yaml": yaml_text,
             "yaml_path": saved_path,
+            "open_url": data_url,
         }
