@@ -71,8 +71,22 @@ class RidiBookMetadataProvider(BaseMetadataProvider):
     is_searchable = True
     config_schema = []
 
+    # 코어 좌측 "카테고리" 내비게이션에 별도 메뉴로 노출되는 풀페이지 탭.
+    # index.html/style.css/script.js 번들로 렌더링되고, 데이터는
+    # get_dashboard_data()를 통해 채워진다 (jikji_sf 플러그인과 동일 패턴).
+    category_tab = {
+        "title": "리디북스 검색결과",
+        "icon": "fa-solid fa-book",
+        "order": 92,
+        "sessions": ["general"],
+    }
+
     def __init__(self):
         self._session = None
+        # 도서 컨텍스트 메뉴에서 실행한 최근 검색 결과 캐시 (db_type별).
+        # URL이 상태를 반영하지 않는 SPA라 자동 이동은 불가능하므로,
+        # 사용자가 사이드바에서 카테고리 탭을 직접 열면 이 캐시를 보여준다.
+        self._last_search = {}
 
     # ------------------------------------------------------------------
     # 내부 HTTP 헬퍼
@@ -406,18 +420,47 @@ class RidiBookMetadataProvider(BaseMetadataProvider):
             import traceback
             print(f"[RidiBookMetadataProvider] YAML 파일 저장 실패 (내용은 반환됨): {traceback.format_exc()}")
 
-        message = f"'{query}' 검색결과 {len(results)}건을 YAML로 만들었습니다."
-        if saved_path:
-            message += f" (저장 위치: {saved_path})"
+        # 카테고리 탭(index.html)에서 보여줄 수 있도록 결과를 캐시해둔다.
+        self._last_search[db_type or "general"] = {
+            "query": query,
+            "book_id": book_id,
+            "results": results,
+            "at": time.time(),
+        }
 
-        # 새 탭에 YAML 내용을 바로 보여주기 위해 data: URL로 인코딩.
-        # (컨텍스트 메뉴 액션은 open_url 필드만 프론트엔드가 새 창으로 열어주는 것으로 확인됨 - naver_book 참고)
-        data_url = "data:text/plain;charset=utf-8," + urllib.parse.quote(yaml_text)
+        tab_title = self.category_tab.get("title", "리디북스 검색결과")
+        message = f"'{query}' 검색결과 {len(results)}건을 찾았습니다. 사이드바의 '{tab_title}' 탭에서 확인하세요."
+        if saved_path:
+            message += f" (YAML도 저장됨: {saved_path})"
 
         return {
             "success": True,
             "message": message,
             "yaml": yaml_text,
             "yaml_path": saved_path,
-            "open_url": data_url,
+        }
+
+    # ------------------------------------------------------------------
+    # 카테고리 탭(index.html) 데이터 공급
+    # ------------------------------------------------------------------
+
+    def get_dashboard_data(self, db_type, limit=200):
+        """
+        컨텍스트 메뉴에서 실행한 최근 검색 결과를 카테고리 풀페이지에 보여준다.
+        아직 검색을 실행한 적이 없으면 빈 목록 + 안내 메시지를 반환한다.
+        """
+        cached = self._last_search.get(db_type or "general")
+        if not cached:
+            return {
+                "success": True,
+                "items": [],
+                "message": "아직 검색 결과가 없습니다. 도서 우클릭 → '리디북스 검색결과 YAML로 저장'을 먼저 실행해주세요.",
+            }
+
+        items = cached.get("results", [])[: max(1, int(limit or 200))]
+        return {
+            "success": True,
+            "items": items,
+            "query": cached.get("query"),
+            "searched_at": cached.get("at"),
         }

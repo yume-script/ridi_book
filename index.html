@@ -1,0 +1,43 @@
+<div class="rb-wrap">
+  <div class="rb-notice">
+    <i class="fa-solid fa-circle-info"></i>
+    <span>
+      이 화면은 도서를 <strong>우클릭 → "리디북스 검색결과 YAML로 저장"</strong>을 실행하면
+      나온 <strong>최근 검색 결과</strong>를 보여줍니다. 여기서는 실시간 검색이 되지 않으니,
+      다른 책을 찾으려면 해당 도서에서 컨텍스트 메뉴를 다시 실행해주세요.
+      카드를 클릭하면 그 책의 메타데이터를 YAML 형식으로 바로 보여줍니다.
+    </span>
+  </div>
+
+  <div class="rb-topbar">
+    <div class="rb-title-group">
+      <span class="rb-title-icon"><i class="fa-solid fa-book"></i></span>
+      <h2 class="rb-title">리디북스 검색결과</h2>
+      <span class="rb-count" id="rb-count">(불러오는 중…)</span>
+    </div>
+    <div class="rb-topbar-right">
+      <button class="rb-pill-btn" id="rb-refresh-btn" title="새로고침">
+        <i class="fa-solid fa-rotate"></i>
+      </button>
+    </div>
+  </div>
+
+  <div class="rb-status" id="rb-status"></div>
+  <div class="rb-grid" id="rb-grid"></div>
+
+  <!-- YAML 상세 보기 패널: 그리드 자리를 대체 (jikji_sf의 리더뷰와 동일한 방식) -->
+  <div id="rb-yaml-view" class="rb-yaml-view" hidden>
+    <div class="rb-yaml-topbar">
+      <button type="button" id="rb-yaml-back" class="rb-pill-btn rb-yaml-back-btn">
+        <i class="fa-solid fa-arrow-left"></i>
+        <span>목록으로</span>
+      </button>
+      <span class="rb-yaml-title" id="rb-yaml-title"></span>
+      <button type="button" id="rb-yaml-copy" class="rb-pill-btn" title="YAML 복사">
+        <i class="fa-solid fa-copy"></i>
+        <span>복사</span>
+      </button>
+    </div>
+    <pre class="rb-yaml-content" id="rb-yaml-content"></pre>
+  </div>
+</div>
