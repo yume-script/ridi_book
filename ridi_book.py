@@ -364,6 +364,26 @@ class RidiBookMetadataProvider(BaseMetadataProvider):
         if not results:
             return {"success": False, "error": f"'{query}' 검색 결과가 없습니다."}
 
+        # 상위 5건은 상세페이지까지 조회해 ISBN/표지/소개 등을 채운다.
+        # (전체를 다 조회하면 느리고 요청도 많아지므로 상위 몇 건으로 제한)
+        DETAIL_FETCH_LIMIT = 5
+        enriched_results = []
+        for i, item in enumerate(results):
+            if i < DETAIL_FETCH_LIMIT and item.get("link"):
+                try:
+                    detail_soup = self._fetch(item["link"])
+                    detail = self._extract_book_detail(detail_soup, item["link"])
+                    merged = dict(item)
+                    merged.update({k: v for k, v in detail.items() if v})
+                    enriched_results.append(merged)
+                except Exception:
+                    import traceback
+                    print(f"[RidiBookMetadataProvider] 상세조회 실패({item.get('link')}): {traceback.format_exc()}")
+                    enriched_results.append(item)
+            else:
+                enriched_results.append(item)
+        results = enriched_results
+
         yaml_payload = {
             "source": "ridibooks",
             "query": query,
